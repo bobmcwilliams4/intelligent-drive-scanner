@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Intelligent Drive Scanner v2.0 - Enterprise File Intelligence Dashboard">
+  <title>Intelligent Drive Scanner v2.0</title>
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-tertiary: #1a1a2e;
+      --text-primary: #e0e0e0;
+      --text-secondary: #a0a0a0;
+      --accent-cyan: #00d4ff;
+      --accent-red: #ff3366;
+      --accent-green: #00ff88;
+      --accent-gold: #ffd700;
+      --accent-purple: #9b59b6;
+      --border: #2a2a3e;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ── Top Bar ─────────────────────────────────────────────── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.5rem;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .topbar-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .topbar-title h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      letter-spacing: 0.5px;
+    }
+
+    .topbar-title .version {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      background: var(--bg-tertiary);
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    .scan-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .scan-status .indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 6px var(--accent-green);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+
+    .scan-status .indicator.scanning {
+      background: var(--accent-gold);
+      box-shadow: 0 0 6px var(--accent-gold);
+      animation: pulse 1.2s infinite;
+    }
+
+    .scan-status .indicator.error {
+      background: var(--accent-red);
+      box-shadow: 0 0 6px var(--accent-red);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #003d52, #005577);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #005577, #0077aa);
+      box-shadow: 0 0 12px rgba(0, 212, 255, 0.2);
+    }
+
+    .btn-danger {
+      border-color: var(--accent-red);
+      color: var(--accent-red);
+    }
+
+    .btn-danger:hover {
+      background: rgba(255, 51, 102, 0.1);
+    }
+
+    .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.78rem; }
+
+    /* ── Tab Navigation ──────────────────────────────────────── */
+    .tab-nav {
+      display: flex;
+      gap: 0;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      padding: 0.75rem 1.25rem;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.03); }
+    .tab-btn.active { color: var(--accent-cyan); border-bottom-color: var(--accent-cyan); }
+
+    /* ── Main Content ────────────────────────────────────────── */
+    .main-content {
+      padding: 1.5rem;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Stats Cards ─────────────────────────────────────────── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      transition: border-color 0.2s;
+    }
+
+    .stat-card:hover { border-color: var(--accent-cyan); }
+
+    .stat-card .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-card .stat-value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      line-height: 1.2;
+    }
+
+    .stat-card .stat-sub {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      margin-top: 0.2rem;
+    }
+
+    .stat-card.critical .stat-value { color: var(--accent-red); }
+    .stat-card.warning .stat-value { color: var(--accent-gold); }
+    .stat-card.success .stat-value { color: var(--accent-green); }
+
+    /* ── Charts Layout ───────────────────────────────────────── */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 900px) {
+      .charts-row { grid-template-columns: 1fr; }
+    }
+
+    .chart-container {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+
+    .chart-container h3 {
+      font-size: 0.9rem;
+      color: var(--text-primary);
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .chart-placeholder {
+      min-height: 320px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+
+    /* ── Section Panels ──────────────────────────────────────── */
+    .panel {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-header h3 {
+      font-size: 0.95rem;
+      color: var(--text-primary);
+    }
+
+    /* ── Search & Filters ────────────────────────────────────── */
+    .filters-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+      align-items: center;
+    }
+
+    .search-input {
+      flex: 1;
+      min-width: 220px;
+      padding: 0.5rem 0.75rem 0.5rem 2.25rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-input:focus { border-color: var(--accent-cyan); }
+
+    .search-wrapper {
+      position: relative;
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .search-wrapper::before {
+      content: "\1F50D";
+      position: absolute;
+      left: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.85rem;
+      opacity: 0.5;
+    }
+
+    .filter-select {
+      padding: 0.5rem 0.75rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      outline: none;
+      cursor: pointer;
+      min-width: 140px;
+    }
+
+    .filter-select:focus { border-color: var(--accent-cyan); }
+    .filter-select option { background: var(--bg-secondary); color: var(--text-primary); }
+
+    /* ── Data Tables ─────────────────────────────────────────── */
+    .data-table-wrapper { overflow-x: auto; }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.83rem;
+    }
+
+    .data-table thead th {
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      color: var(--text-secondary);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .data-table thead th:hover { color: var(--accent-cyan); }
+    .data-table thead th.sorted-asc::after { content: " \25B2"; font-size: 0.6rem; }
+    .data-table thead th.sorted-desc::after { content: " \25BC"; font-size: 0.6rem; }
+
+    .data-table tbody tr {
+      border-bottom: 1px solid rgba(42, 42, 62, 0.5);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .data-table tbody tr:hover { background: rgba(0, 212, 255, 0.04); }
+
+    .data-table tbody td {
+      padding: 0.55rem 0.75rem;
+      color: var(--text-primary);
+      vertical-align: middle;
+    }
+
+    .data-table .td-path {
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-secondary);
+      font-size: 0.78rem;
+    }
+
+    .row-detail {
+      display: none;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .row-detail.expanded { display: table-row; }
+
+    .row-detail td {
+      padding: 1rem 1.25rem;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      font-size: 0.82rem;
+    }
+
+    .detail-section h4 {
+      font-size: 0.78rem;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.5rem;
+    }
+
+    .detail-section ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .detail-section ul li {
+      padding: 0.2rem 0;
+      color: var(--text-secondary);
+    }
+
+    /* ── Pagination ──────────────────────────────────────────── */
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 1rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .pagination-info {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .page-btn {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .page-btn:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+    .page-btn.active { background: var(--accent-cyan); color: var(--bg-primary); border-color: var(--accent-cyan); }
+    .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* ── Score Badges ────────────────────────────────────────── */
+    .score-badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      min-width: 36px;
+      text-align: center;
+    }
+
+    .score-high { background: rgba(0, 255, 136, 0.15); color: var(--accent-green); }
+    .score-mid { background: rgba(0, 212, 255, 0.15); color: var(--accent-cyan); }
+    .score-low { background: rgba(255, 215, 0, 0.15); color: var(--accent-gold); }
+    .score-risk { background: rgba(255, 51, 102, 0.15); color: var(--accent-red); }
+
+    /* ── Domain Cards ────────────────────────────────────────── */
+    .domain-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 1rem;
+    }
+
+    .domain-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      transition: all 0.2s;
+    }
+
+    .domain-card:hover {
+      border-color: var(--accent-cyan);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(0, 212, 255, 0.08);
+    }
+
+    .domain-card .domain-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      margin-bottom: 0.5rem;
+    }
+
+    .domain-card .domain-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.35rem;
+      font-size: 0.78rem;
+    }
+
+    .domain-card .domain-stats .ds-label { color: var(--text-secondary); }
+    .domain-card .domain-stats .ds-value { text-align: right; color: var(--text-primary); font-weight: 500; }
+
+    .domain-card .domain-bar {
+      margin-top: 0.6rem;
+      height: 4px;
+      background: var(--bg-primary);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .domain-card .domain-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    /* ── Duplicate Clusters ──────────────────────────────────── */
+    .dup-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .cluster-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .cluster-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .cluster-hash {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 0.75rem;
+      color: var(--accent-purple);
+      background: var(--bg-primary);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+    }
+
+    .cluster-waste {
+      font-size: 0.8rem;
+      color: var(--accent-red);
+      font-weight: 600;
+    }
+
+    .cluster-files {
+      list-style: none;
+      padding: 0;
+      font-size: 0.8rem;
+    }
+
+    .cluster-files li {
+      padding: 0.3rem 0.5rem;
+      border-left: 2px solid var(--border);
+      margin-bottom: 0.25rem;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .cluster-files li.keeper {
+      border-left-color: var(--accent-green);
+      color: var(--accent-green);
+    }
+
+    .cluster-files li .file-path {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 70%;
+    }
+
+    /* ── Recommendation Cards ────────────────────────────────── */
+    .rec-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+      border-left: 3px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    .rec-card.severity-critical { border-left-color: var(--accent-red); }
+    .rec-card.severity-high { border-left-color: #ff8c00; }
+    .rec-card.severity-medium { border-left-color: var(--accent-cyan); }
+    .rec-card.severity-low { border-left-color: var(--accent-green); }
+
+    .rec-content { flex: 1; }
+
+    .rec-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 0.3rem;
+    }
+
+    .rec-description {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+    }
+
+    .rec-meta {
+      display: flex;
+      gap: 1rem;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .rec-meta span { display: flex; align-items: center; gap: 0.25rem; }
+
+    .severity-tag {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 0.15rem 0.5rem;
+      border-radius: 3px;
+    }
+
+    .severity-tag.critical { background: rgba(255,51,102,0.2); color: var(--accent-red); }
+    .severity-tag.high { background: rgba(255,140,0,0.2); color: #ff8c00; }
+    .severity-tag.medium { background: rgba(0,212,255,0.2); color: var(--accent-cyan); }
+    .severity-tag.low { background: rgba(0,255,136,0.2); color: var(--accent-green); }
+
+    /* ── Risk Tab ────────────────────────────────────────────── */
+    .risk-categories {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .risk-cat-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .risk-cat-card .risk-cat-name {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-bottom: 0.25rem;
+    }
+
+    .risk-cat-card .risk-cat-count {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent-red);
+    }
+
+    /* ── Timeline Tab ────────────────────────────────────────── */
+    .timeline-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .timeline-item {
+      display: flex;
+      gap: 1.25rem;
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+    }
+
+    .timeline-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      margin-top: 0.3rem;
+      flex-shrink: 0;
+      box-shadow: 0 0 6px rgba(0, 212, 255, 0.3);
+    }
+
+    .timeline-content { flex: 1; }
+
+    .timeline-date {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.25rem;
+    }
+
+    .timeline-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 0.4rem;
+    }
+
+    .timeline-stats {
+      display: flex;
+      gap: 1.25rem;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+    }
+
+    .timeline-stats span { display: flex; align-items: center; gap: 0.25rem; }
+
+    /* ── Scan Progress Modal ─────────────────────────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.visible { display: flex; }
+
+    .modal {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      width: 90%;
+      max-width: 520px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal h2 {
+      font-size: 1.1rem;
+      color: var(--accent-cyan);
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .progress-section {
+      margin-bottom: 1rem;
+    }
+
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.35rem;
+    }
+
+    .progress-bar {
+      height: 8px;
+      background: var(--bg-primary);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
+      border-radius: 4px;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+
+    .progress-details {
+      margin-top: 1rem;
+      font-size: 0.82rem;
+    }
+
+    .progress-details .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid rgba(42, 42, 62, 0.5);
+    }
+
+    .progress-details .detail-label { color: var(--text-secondary); }
+    .progress-details .detail-value { color: var(--text-primary); font-weight: 500; }
+    .progress-details .detail-value.file-path {
+      max-width: 280px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      direction: rtl;
+      text-align: right;
+    }
+
+    .modal-footer {
+      margin-top: 1.25rem;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    /* ── Empty States ────────────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--text-secondary);
+    }
+
+    .empty-state .empty-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+      opacity: 0.4;
+    }
+
+    .empty-state p { font-size: 0.9rem; }
+
+    /* ── Loading Spinner ─────────────────────────────────────── */
+    .spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent-cyan);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Responsive ──────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .topbar { flex-wrap: wrap; gap: 0.5rem; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .domain-grid { grid-template-columns: 1fr; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .filters-bar { flex-direction: column; }
+      .rec-card { flex-direction: column; }
+    }
+
+    @media (max-width: 480px) {
+      .stats-grid { grid-template-columns: 1fr; }
+      .main-content { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- TOP BAR                                                     -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <header class="topbar" role="banner">
+    <div class="topbar-title">
+      <h1>Intelligent Drive Scanner</h1>
+      <span class="version">v2.0</span>
+    </div>
+
+    <div class="scan-status" aria-live="polite">
+      <span class="indicator" id="status-indicator" title="Scanner Status"></span>
+      <span id="status-text">Idle</span>
+    </div>
+
+    <div class="topbar-actions">
+      <button class="btn" id="btn-export" title="Export Report" aria-label="Export scan report">
+        Export
+      </button>
+      <button class="btn btn-primary" id="btn-start-scan" aria-label="Start new scan">
+        Start Scan
+      </button>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- TAB NAVIGATION                                              -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <nav class="tab-nav" role="tablist" aria-label="Dashboard sections">
+    <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="panel-overview" data-tab="overview">Overview</button>
+    <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-files" data-tab="files">Files</button>
+    <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-domains" data-tab="domains">Domains</button>
+    <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-duplicates" data-tab="duplicates">Duplicates</button>
+    <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-recommendations" data-tab="recommendations">Recommendations</button>
+    <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-risk" data-tab="risk">Risk</button>
+    <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-timeline" data-tab="timeline">Timeline</button>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- MAIN CONTENT                                                -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <main class="main-content" role="main">
+
+    <!-- ─────────────────────────────────────────────────────── -->
+    <!-- OVERVIEW TAB                                              -->
+    <!-- ─────────────────────────────────────────────────────── -->
+    <section class="tab-panel active" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+
+      <div class="stats-grid" id="overview-stats">
+        <div class="stat-card">
+          <div class="stat-label">Total Files</div>
+          <div class="stat-value" id="stat-total-files">--</div>
+          <div class="stat-sub" id="stat-total-files-sub">awaiting scan</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Size</div>
+          <div class="stat-value" id="stat-total-size">--</div>
+          <div class="stat-sub" id="stat-total-size-sub">on disk</div>
+        </div>
+        <div class="stat-card success">
+          <div class="stat-label">Classified</div>
+          <div class="stat-value" id="stat-classified">--</div>
+          <div class="stat-sub" id="stat-classified-sub">files categorized</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Duration</div>
+          <div class="stat-value" id="stat-duration">--</div>
+          <div class="stat-sub" id="stat-duration-sub">scan time</div>
+        </div>
+        <div class="stat-card warning">
+          <div class="stat-label">Duplicates</div>
+          <div class="stat-value" id="stat-duplicates">--</div>
+          <div class="stat-sub" id="stat-duplicates-sub">duplicate clusters</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Recommendations</div>
+          <div class="stat-value" id="stat-recommendations">--</div>
+          <div class="stat-sub" id="stat-recommendations-sub">actions available</div>
+        </div>
+        <div class="stat-card critical">
+          <div class="stat-label">High Risk</div>
+          <div class="stat-value" id="stat-high-risk">--</div>
+          <div class="stat-sub" id="stat-high-risk-sub">files flagged</div>
+        </div>
+        <div class="stat-card critical">
+          <div class="stat-label">Sensitive</div>
+          <div class="stat-value" id="stat-sensitive">--</div>
+          <div class="stat-sub" id="stat-sensitive-sub">sensitive files detected</div>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-container">
+          <h3>Domain Distribution</h3>
+          <div id="domain-sunburst" class="chart-placeholder" aria-label="Domain distribution sunburst chart">
+            Loading chart...
+          </div>
+        </div>
+        <div class="chart-container">
+          <h3>Score Distribution Heatmap</h3>
+          <div id="score-heatmap" class="chart-placeholder" aria-label="Score distribution heatmap">
+            Loading chart...
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Recent Scan Summary</h3>
+          <span class="btn btn-sm" id="btn-refresh-summary">Refresh</span>
+        </div>
+        <div id="recent-scan-summary">
+          <div class="empty-state">
+            <div class="empty-icon">&#128202;</div>
+            <p>No scan data available. Start a scan to see results.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────── -->
+    <!-- FILES TAB                                                 -->
+    <!-- ─────────────────────────────────────────────────────── -->
+    <section class="tab-panel" id="panel-files" role="tabpanel" aria-labelledby="tab-files">
+
+      <div class="filters-bar">
+        <div class="search-wrapper">
+          <input type="search" class="search-input" id="files-search" placeholder="Search files by name or path..." aria-label="Search files">
+        </div>
+        <select class="filter-select" id="filter-domain" aria-label="Filter by domain">
+          <option value="">All Domains</option>
+        </select>
+        <select class="filter-select" id="filter-extension" aria-label="Filter by extension">
+          <option value="">All Extensions</option>
+        </select>
+        <select class="filter-select" id="filter-score-range" aria-label="Filter by score range">
+          <option value="">All Scores</option>
+          <option value="90-100">90-100 (Excellent)</option>
+          <option value="70-89">70-89 (Good)</option>
+          <option value="50-69">50-69 (Average)</option>
+          <option value="0-49">0-49 (Low)</option>
+        </select>
+      </div>
+
+      <div class="panel">
+        <div class="data-table-wrapper">
+          <table class="data-table" id="files-table" aria-label="Scanned files">
+            <thead>
+              <tr>
+                <th data-sort="filename" scope="col">Filename</th>
+                <th data-sort="path" scope="col">Path</th>
+                <th data-sort="size" scope="col">Size</th>
+                <th data-sort="domain" scope="col">Domain</th>
+                <th data-sort="quality" scope="col">Quality</th>
+                <th data-sort="importance" scope="col">Importance</th>
+                <th data-sort="risk" scope="col">Risk</th>
+                <th data-sort="overall" scope="col">Overall</th>
+              </tr>
+            </thead>
+            <tbody id="files-tbody">
+              <!-- Populated by dashboard.js -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination" id="files-pagination">
+          <div class="pagination-info" id="files-page-info">
+            Showing 0 of 0 files
+          </div>
+          <div class="pagination-controls" id="files-page-controls">
+            <button class="page-btn" id="files-page-first" aria-label="First page" disabled>&laquo;</button>
+            <button class="page-btn" id="files-page-prev" aria-label="Previous page" disabled>&lsaquo;</button>
+            <span id="files-page-numbers"></span>
+            <button class="page-btn" id="files-page-next" aria-label="Next page" disabled>&rsaquo;</button>
+            <button class="page-btn" id="files-page-last" aria-label="Last page" disabled>&raquo;</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────── -->
+    <!-- DOMAINS TAB                                               -->
+    <!-- ─────────────────────────────────────────────────────── -->
+    <section class="tab-panel" id="panel-domains" role="tabpanel" aria-labelledby="tab-domains">
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Domain Overview</h3>
+          <span class="btn btn-sm" id="btn-refresh-domains">Refresh</span>
+        </div>
+        <div class="domain-grid" id="domains-grid">
+          <!-- Populated by dashboard.js -->
+        </div>
+      </div>
+
+      <div class="chart-container">
+        <h3>Domain Distribution (Full View)</h3>
+        <div id="domain-sunburst-full" class="chart-placeholder" aria-label="Full domain distribution sunburst chart">
+          Loading chart...
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────── -->
+    <!-- DUPLICATES TAB                                            -->
+    <!-- ─────────────────────────────────────────────────────── -->
+    <section class="tab-panel" id="panel-duplicates" role="tabpanel" aria-labelledby="tab-duplicates">
+
+      <div class="dup-summary" id="dup-summary-stats">
+        <div class="stat-card">
+          <div class="stat-label">Duplicate Clusters</div>
+          <div class="stat-value" id="dup-clusters">--</div>
+        </div>
+        <div class="stat-card warning">
+          <div class="stat-label">Total Wasted Space</div>
+          <div class="stat-value" id="dup-wasted">--</div>
+        </div>
+        <div class="stat-card success">
+          <div class="stat-label">Potential Savings</div>
+          <div class="stat-value" id="dup-savings">--</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Duplicate Clusters</h3>
+          <span class="btn btn-sm" id="btn-refresh-duplicates">Refresh</span>
+        </div>
+        <div id="duplicates-list">
+          <div class="empty-state">
+            <div class="empty-icon">&#128451;</div>
+            <p>No duplicate analysis available. Run a scan first.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────── -->
+    <!-- RECOMMENDATIONS TAB                                       -->
+    <!-- ─────────────────────────────────────────────────────── -->
+    <section class="tab-panel" id="panel-recommendations" role="tabpanel" aria-labelledby="tab-recommendations">
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Recommendations</h3>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <select class="filter-select" id="filter-rec-severity" aria-label="Filter by severity" style="min-width:120px;">
+              <option value="">All Severities</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <span class="btn btn-sm" id="btn-refresh-recs">Refresh</span>
+          </div>
+        </div>
+        <div id="recommendations-list">
+          <div class="empty-state">
+            <div class="empty-icon">&#128161;</div>
+            <p>No recommendations yet. Run a scan to generate insights.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────── -->
+    <!-- RISK TAB                                                  -->
+    <!-- ─────────────────────────────────────────────────────── -->
+    <section class="tab-panel" id="panel-risk" role="tabpanel" aria-labelledby="tab-risk">
+
+      <div class="risk-categories" id="risk-categories">
+        <!-- Populated by dashboard.js -->
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3>High-Risk Files</h3>
+          <span class="btn btn-sm" id="btn-refresh-risk">Refresh</span>
+        </div>
+        <div class="data-table-wrapper">
+          <table class="data-table" id="risk-table" aria-label="High risk files">
+            <thead>
+              <tr>
+                <th data-sort="filename" scope="col">Filename</th>
+                <th data-sort="path" scope="col">Path</th>
+                <th data-sort="domain" scope="col">Domain</th>
+                <th data-sort="risk_score" scope="col">Risk Score</th>
+                <th data-sort="risk_category" scope="col">Category</th>
+                <th data-sort="size" scope="col">Size</th>
+              </tr>
+            </thead>
+            <tbody id="risk-tbody">
+              <!-- Populated by dashboard.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────────── -->
+    <!-- TIMELINE TAB                                              -->
+    <!-- ─────────────────────────────────────────────────────── -->
+    <section class="tab-panel" id="panel-timeline" role="tabpanel" aria-labelledby="tab-timeline">
+
+      <div class="chart-container" style="margin-bottom:1.5rem;">
+        <h3>Scan Trends</h3>
+        <div id="timeline-chart" class="chart-placeholder" aria-label="Scan timeline trend chart">
+          Loading chart...
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Scan History</h3>
+          <span class="btn btn-sm" id="btn-refresh-timeline">Refresh</span>
+        </div>
+        <ul class="timeline-list" id="timeline-list">
+          <li>
+            <div class="empty-state">
+              <div class="empty-icon">&#128197;</div>
+              <p>No scan history available.</p>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- SCAN PROGRESS MODAL                                         -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="scan-progress-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal">
+      <h2 id="modal-title">
+        <span class="spinner"></span>
+        Scan In Progress
+      </h2>
+
+      <div class="progress-section">
+        <div class="progress-label">
+          <span id="progress-phase">Initializing...</span>
+          <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+      </div>
+
+      <div class="progress-details">
+        <div class="detail-row">
+          <span class="detail-label">Phase</span>
+          <span class="detail-value" id="progress-phase-name">Discovery</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Current File</span>
+          <span class="detail-value file-path" id="progress-current-file">--</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Files Processed</span>
+          <span class="detail-value" id="progress-files-processed">0 / 0</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">API Calls</span>
+          <span class="detail-value" id="progress-api-calls">0</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Elapsed</span>
+          <span class="detail-value" id="progress-elapsed">00:00</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">ETA</span>
+          <span class="detail-value" id="progress-eta">Calculating...</span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-danger" id="btn-cancel-scan" aria-label="Cancel scan">
+          Cancel Scan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- FILE DETAIL TEMPLATE (hidden, cloned by JS)                 -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <template id="tpl-file-row">
+    <tr class="file-row" data-file-id="">
+      <td class="td-filename"></td>
+      <td class="td-path"></td>
+      <td class="td-size"></td>
+      <td class="td-domain"></td>
+      <td class="td-quality"><span class="score-badge"></span></td>
+      <td class="td-importance"><span class="score-badge"></span></td>
+      <td class="td-risk"><span class="score-badge"></span></td>
+      <td class="td-overall"><span class="score-badge"></span></td>
+    </tr>
+  </template>
+
+  <template id="tpl-file-detail">
+    <tr class="row-detail">
+      <td colspan="8">
+        <div class="detail-grid">
+          <div class="detail-section">
+            <h4>Classifications</h4>
+            <ul class="detail-classifications"></ul>
+          </div>
+          <div class="detail-section">
+            <h4>Relationships</h4>
+            <ul class="detail-relationships"></ul>
+          </div>
+          <div class="detail-section">
+            <h4>Metadata</h4>
+            <ul class="detail-metadata"></ul>
+          </div>
+          <div class="detail-section">
+            <h4>Scores</h4>
+            <ul class="detail-scores"></ul>
+          </div>
+        </div>
+      </td>
+    </tr>
+  </template>
+
+  <template id="tpl-domain-card">
+    <div class="domain-card">
+      <div class="domain-name"></div>
+      <div class="domain-stats">
+        <span class="ds-label">Files</span>
+        <span class="ds-value domain-file-count"></span>
+        <span class="ds-label">Avg Score</span>
+        <span class="ds-value domain-avg-score"></span>
+        <span class="ds-label">Total Size</span>
+        <span class="ds-value domain-total-size"></span>
+        <span class="ds-label">Extensions</span>
+        <span class="ds-value domain-extensions"></span>
+      </div>
+      <div class="domain-bar">
+        <div class="domain-bar-fill"></div>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-cluster-card">
+    <div class="cluster-card">
+      <div class="cluster-header">
+        <span class="cluster-hash"></span>
+        <span class="cluster-waste"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.5rem;">
+        <span class="cluster-file-count"></span>
+        <span class="cluster-each-size"></span>
+      </div>
+      <ul class="cluster-files"></ul>
+    </div>
+  </template>
+
+  <template id="tpl-rec-card">
+    <div class="rec-card">
+      <div class="rec-content">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem;">
+          <span class="severity-tag"></span>
+          <span class="rec-title"></span>
+        </div>
+        <div class="rec-description"></div>
+        <div class="rec-meta">
+          <span class="rec-affected"></span>
+          <span class="rec-impact"></span>
+        </div>
+      </div>
+      <div class="rec-actions">
+        <button class="btn btn-sm btn-primary rec-execute-btn" style="display:none;" aria-label="Execute recommendation">
+          Execute
+        </button>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl-risk-row">
+    <tr class="risk-row">
+      <td class="td-filename"></td>
+      <td class="td-path"></td>
+      <td class="td-domain"></td>
+      <td class="td-risk-score"><span class="score-badge score-risk"></span></td>
+      <td class="td-risk-category"></td>
+      <td class="td-size"></td>
+    </tr>
+  </template>
+
+  <template id="tpl-timeline-item">
+    <li class="timeline-item">
+      <div class="timeline-dot"></div>
+      <div class="timeline-content">
+        <div class="timeline-date"></div>
+        <div class="timeline-title"></div>
+        <div class="timeline-stats">
+          <span class="tl-files"></span>
+          <span class="tl-size"></span>
+          <span class="tl-duration"></span>
+          <span class="tl-domains"></span>
+        </div>
+      </div>
+    </li>
+  </template>
+
+  <template id="tpl-risk-cat-card">
+    <div class="risk-cat-card">
+      <div class="risk-cat-name"></div>
+      <div class="risk-cat-count"></div>
+    </div>
+  </template>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- SCRIPTS                                                     -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>
