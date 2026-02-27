@@ -465,3 +465,25 @@ class ScanConfig(BaseModel):
     skip_large_mb: int | None = None
     incremental: bool = True
     deep_analyze_paths: list[str] = Field(default_factory=list)
+
+
+# ── Recommendation Thresholds ────────────────────────────────────────────────
+
+RECOMMENDATION_THRESHOLDS: dict[str, float] = {
+    # Archive: stale + low importance
+    "archive_staleness_min": 80.0,
+    "archive_importance_max": 30.0,
+    # Secure: sensitive files in insecure locations
+    "secure_sensitivity_min": 70.0,
+    # Encrypt: highly sensitive unencrypted
+    "encrypt_sensitivity_min": 80.0,
+    # Review: high-risk files
+    "review_risk_min": 70.0,
+    # Alert: cyber-classified files
+    "alert_cyber_score_min": 70.0,
+    # Backup: important + unique files not backed up
+    "backup_importance_min": 80.0,
+    # Update: stale but important (needs refresh)
+    "update_staleness_min": 50.0,
+    "update_importance_min": 60.0,
+}

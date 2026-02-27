@@ -101,7 +101,7 @@ def test_sensitivity_ssn_pattern():
 
 def test_sensitivity_api_key():
     """File with API key pattern should be sensitive."""
-    f = _make_file(content_sample="api_key = AKIAIOSFODNN7EXAMPLE")
+    f = _make_file(content_sample="api_key=secret_abc123def456ghi789jkl012mno")
     score = calculate_sensitivity(f, [])
     assert score >= 70.0
 
